@@ -324,16 +324,17 @@ export class ColabClient {
     });
     const response = await fetch(request);
     if (!response.ok) {
-      let errorBody = "";
+      let errorBody;
       try {
         errorBody = await response.text();
       } catch {
         // Ignore errors reading the body
       }
-      throw new Error(
-        `Failed to issue request ${request.method} ${endpoint.toString()}: ${response.statusText}` +
-          (errorBody ? `\nResponse body: ${errorBody}` : ""),
-      );
+      throw new ColabRequestError({
+        request,
+        response,
+        responseBody: errorBody,
+      });
     }
     if (!schema) {
       return;
@@ -353,4 +354,28 @@ function stripXssiPrefix(v: string): string {
     return v;
   }
   return v.slice(XSSI_PREFIX.length);
+}
+
+class ColabRequestError extends Error {
+  readonly request: fetch.Request;
+  readonly response: fetch.Response;
+  readonly responseBody?: string;
+
+  constructor({
+    request,
+    response,
+    responseBody,
+  }: {
+    request: fetch.Request;
+    response: fetch.Response;
+    responseBody?: string;
+  }) {
+    super(
+      `Failed to issue request ${request.method} ${request.url}: ${response.statusText}` +
+        (responseBody ? `\nResponse body: ${responseBody}` : ""),
+    );
+    this.request = request;
+    this.response = response;
+    this.responseBody = responseBody;
+  }
 }
