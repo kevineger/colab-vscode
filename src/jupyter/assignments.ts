@@ -412,9 +412,12 @@ export class AssignmentManager implements vscode.Disposable {
         removed: [{ server, userInitiated: true }],
         changed: [],
       });
+      const client = this.client.jupyter(server);
       await Promise.all(
-        (await this.client.listSessions(server, signal)).map((session) =>
-          this.client.deleteSession(server, session.id, signal),
+        (await client.sessions.list({ signal })).map((session) =>
+          session.id
+            ? client.sessions.delete({ session: session.id }, { signal })
+            : Promise.resolve(),
         ),
       );
     }

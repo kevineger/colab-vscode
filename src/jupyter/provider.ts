@@ -31,6 +31,9 @@ import { traceMethod } from "../common/logging/decorators";
 import { InputFlowAction } from "../common/multi-step-quickpick";
 import { isUUID } from "../utils/uuid";
 import { AssignmentChangeEvent, AssignmentManager } from "./assignments";
+import { ColabAssignedServer } from "./servers";
+
+type Endpoint = string;
 
 /**
  * Colab Jupyter server provider.
@@ -45,15 +48,20 @@ export class ColabJupyterServerProvider
     vscode.Disposable
 {
   readonly onDidChangeServers: vscode.Event<void>;
+  readonly onDidAssignmentsChange: vscode.Event<Set<ColabAssignedServer>>;
 
   private readonly serverCollection: JupyterServerCollection;
   private readonly serverChangeEmitter: vscode.EventEmitter<void>;
+  private readonly assignmentsChangeEmitter: vscode.EventEmitter<
+    Set<ColabAssignedServer>
+  >;
   private isAuthorized = false;
   private authorizedListener: Disposable;
   private setServerContextRunner = new LatestCancelable(
     "hasAssignedServer",
     this.setHasAssignedServerContext.bind(this),
   );
+  private servers: Map<Endpoint, ColabAssignedServer> | undefined;
 
   constructor(
     private readonly vs: typeof vscode,
@@ -65,6 +73,10 @@ export class ColabJupyterServerProvider
   ) {
     this.serverChangeEmitter = new this.vs.EventEmitter<void>();
     this.onDidChangeServers = this.serverChangeEmitter.event;
+    this.assignmentsChangeEmitter = new this.vs.EventEmitter<
+      Set<ColabAssignedServer>
+    >();
+    this.onDidAssignmentsChange = this.assignmentsChangeEmitter.event;
     this.authorizedListener = authEvent(this.handleAuthChange.bind(this));
     this.assignmentManager.onDidAssignmentsChange(
       this.handleAssignmentsChange.bind(this),
@@ -88,13 +100,18 @@ export class ColabJupyterServerProvider
    * can be used.
    */
   @traceMethod
-  provideJupyterServers(
+  async provideJupyterServers(
     _token: CancellationToken,
-  ): ProviderResult<JupyterServer[]> {
+  ): Promise<JupyterServer[]> {
     if (!this.isAuthorized) {
       return [];
     }
-    return this.assignmentManager.getServers("extension");
+    const res = await this.assignmentManager.getServers("extension");
+    if (!this.servers) {
+      this.servers = new Map(res.map((r) => [r.endpoint, r]));
+      this.fireAssignmentChange();
+    }
+    return res;
   }
 
   /**
@@ -231,23 +248,46 @@ export class ColabJupyterServerProvider
     );
   }
 
+  fireAssignmentChange() {
+    const cur = new Set(
+      this.isAuthorized && this.servers ? this.servers.values() : undefined,
+    );
+    this.assignmentsChangeEmitter.fire(cur);
+  }
+
   private handleAuthChange(e: AuthChangeEvent): void {
     if (this.isAuthorized === e.hasValidSession) {
       return;
     }
     this.isAuthorized = e.hasValidSession;
     this.serverChangeEmitter.fire();
+    this.fireAssignmentChange();
     void this.setServerContextRunner.run();
   }
 
   private handleAssignmentsChange(e: AssignmentChangeEvent): void {
+    if (this.servers) {
+      for (const s of e.added) {
+        this.servers.set(s.endpoint, s);
+      }
+      for (const s of e.changed) {
+        this.servers.set(s.endpoint, s);
+      }
+      for (const s of e.removed) {
+        this.servers.delete(s.server.endpoint);
+      }
+      this.fireAssignmentChange();
+    }
+
     const externalRemovals = e.removed.filter((s) => !s.userInitiated);
     for (const { server: s } of externalRemovals) {
       this.vs.window.showWarningMessage(
         `Server "${s.label}" has been removed, either outside of the extension or due to inactivity.`,
       );
     }
+
     this.serverChangeEmitter.fire();
+    this.fireAssignmentChange();
     void this.setServerContextRunner.run();
   }
 }

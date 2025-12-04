@@ -29,6 +29,7 @@ import { initializeLogger, log } from "./common/logging";
 import { Toggleable } from "./common/toggleable";
 import { getPackageInfo } from "./config/package-info";
 import { AssignmentManager } from "./jupyter/assignments";
+import { ContentsFileSystemProvider } from "./jupyter/contents";
 import { getJupyterApi } from "./jupyter/jupyter-extension";
 import { ColabJupyterServerProvider } from "./jupyter/provider";
 import { ServerStorage } from "./jupyter/storage";
@@ -78,6 +79,11 @@ export async function activate(context: vscode.ExtensionContext) {
     new ServerPicker(vscode, assignmentManager),
     jupyter.exports,
   );
+  const fs = vscode.workspace.registerFileSystemProvider(
+    "colab",
+    new ContentsFileSystemProvider(vscode, colabClient, serverProvider),
+    { isCaseSensitive: true },
+  );
   const connections = new ConnectionRefreshController(assignmentManager);
   const keepServersAlive = new ServerKeepAliveController(
     vscode,
@@ -104,6 +110,7 @@ export async function activate(context: vscode.ExtensionContext) {
     authProvider,
     assignmentManager,
     serverProvider,
+    fs,
     connections,
     keepServersAlive,
     ...consumptionMonitor.disposables,

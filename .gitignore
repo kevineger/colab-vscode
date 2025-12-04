@@ -1,6 +1,9 @@
 .env
 .vscode-test/
 *.vsix
+# It's not important to have a fixed verion or config since we generate and submit the code.
 node_modules/
+openapitools.json
 out/
 src/colab-config.ts
+src/jupyter/client/post-processed-api.yaml

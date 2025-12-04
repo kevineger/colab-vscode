@@ -12,8 +12,8 @@ import { traceMethod } from "../common/logging/decorators";
 import { OverrunPolicy, SequentialTaskRunner } from "../common/task-runner";
 import { Toggleable } from "../common/toggleable";
 import { AssignmentManager } from "../jupyter/assignments";
+import { Kernel } from "../jupyter/client/generated";
 import { ColabAssignedServer } from "../jupyter/servers";
-import { Kernel } from "./api";
 import { ColabClient } from "./client";
 
 interface Config {
@@ -126,7 +126,8 @@ export class ServerKeepAliveController implements Toggleable, Disposable {
     assignment: ColabAssignedServer,
     signal: AbortSignal,
   ): Promise<void> {
-    const kernels = await this.colabClient.listKernels(assignment, signal);
+    const client = this.colabClient.jupyter(assignment);
+    const kernels = await client.kernels.list({ signal });
     if (await this.shouldKeepAlive(assignment, kernels)) {
       await this.colabClient.sendKeepAlive(assignment.endpoint, signal);
     }
@@ -154,7 +155,8 @@ export class ServerKeepAliveController implements Toggleable, Disposable {
     const now = new Date();
 
     const hasNoConnections =
-      kernels.length === 0 || kernels.every((k) => k.connections === 0);
+      kernels.length === 0 ||
+      kernels.every((k) => (k.connections ? k.connections === 0 : true));
     if (hasNoConnections) {
       return false;
     }
@@ -189,10 +191,13 @@ export class ServerKeepAliveController implements Toggleable, Disposable {
 
   private hasActiveKernel(now: Date, kernels: Kernel[]): boolean {
     for (const k of kernels) {
-      if (ACTIVE_KERNEL_STATES.has(k.executionState)) {
+      if (k.executionState && ACTIVE_KERNEL_STATES.has(k.executionState)) {
         return true;
       }
 
+      if (!k.lastActivity) {
+        continue;
+      }
       const lastActivity = new Date(k.lastActivity);
       const lastActiveFromNowMs = now.getTime() - lastActivity.getTime();
       if (lastActiveFromNowMs < this.config.inactivityThresholdMs) {

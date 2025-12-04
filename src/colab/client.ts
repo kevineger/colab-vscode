@@ -9,6 +9,8 @@ import * as https from "https";
 import fetch, { Request, RequestInit, Headers } from "node-fetch";
 import { z } from "zod";
 import { traceMethod } from "../common/logging/decorators";
+import { createJupyterClient, JupyterClient } from "../jupyter/client";
+import { Session } from "../jupyter/client/generated";
 import { ColabAssignedServer } from "../jupyter/servers";
 import { uuidToWebSafeBase64 } from "../utils/uuid";
 import {
@@ -19,10 +21,6 @@ import {
   CcuInfoSchema,
   AssignmentSchema,
   GetAssignmentResponseSchema,
-  KernelSchema,
-  Kernel,
-  SessionSchema,
-  Session,
   UserInfoSchema,
   SubscriptionTier,
   PostAssignmentResponse,
@@ -32,12 +30,12 @@ import {
   ListedAssignment,
   RuntimeProxyInfo,
   RuntimeProxyInfoSchema,
+  SessionSchema,
 } from "./api";
 import {
   ACCEPT_JSON_HEADER,
   AUTHORIZATION_HEADER,
   COLAB_CLIENT_AGENT_HEADER,
-  COLAB_RUNTIME_PROXY_TOKEN_HEADER,
   COLAB_TUNNEL_HEADER,
   COLAB_XSRF_TOKEN_HEADER,
 } from "./headers";
@@ -71,6 +69,21 @@ export class ColabClient {
     if (colabDomain.hostname === "localhost") {
       this.httpsAgent = new https.Agent({ rejectUnauthorized: false });
     }
+  }
+
+  /**
+   * Get the {@link JupyterClient} for a server.
+   *
+   * @param server - The assigned server whose Jupyter Server REST API is being
+   * used.
+   *
+   * @returns A {@link JupyterClient} for the provided server.
+   */
+  jupyter(server: ColabAssignedServer): JupyterClient {
+    return createJupyterClient(
+      server.connectionInformation,
+      this.getAccessToken,
+    );
   }
 
   /**
@@ -247,61 +260,22 @@ export class ColabClient {
   }
 
   /**
-   * Lists all kernels for a given server.
+   * Lists all sessions for a given server by its endpoint.
    *
-   * @param server - The server to list kernels for.
-   * @param signal - Optional {@link AbortSignal} to cancel the request.
-   * @returns The list of kernels.
-   */
-  async listKernels(
-    server: ColabAssignedServer,
-    signal?: AbortSignal,
-  ): Promise<Kernel[]> {
-    const url = new URL(
-      "api/kernels",
-      server.connectionInformation.baseUrl.toString(),
-    );
-    return await this.issueRequest(
-      url,
-      {
-        method: "GET",
-        headers: {
-          [COLAB_RUNTIME_PROXY_TOKEN_HEADER.key]:
-            server.connectionInformation.token,
-        },
-        signal,
-      },
-      z.array(KernelSchema),
-    );
-  }
-
-  /**
-   * Lists all sessions for a given server or assignment endpoint.
-   *
-   * @param serverOrEndpoint - The server or assignment endpoint to list
-   *   sessions for.
+   * @param endpoint - The assignment endpoint to list sessions for.
    * @param signal - Optional {@link AbortSignal} to cancel the request.
    * @returns The list of sessions.
    */
   async listSessions(
-    serverOrEndpoint: ColabAssignedServer | string,
+    endpoint: string,
     signal?: AbortSignal,
   ): Promise<Session[]> {
-    let url: URL;
-    let headers: fetch.HeadersInit;
-    if (typeof serverOrEndpoint === "string") {
-      url = new URL(
-        `${TUN_ENDPOINT}/${serverOrEndpoint}/api/sessions`,
-        this.colabDomain,
-      );
-      headers = { [COLAB_TUNNEL_HEADER.key]: COLAB_TUNNEL_HEADER.value };
-    } else {
-      const connectionInfo = serverOrEndpoint.connectionInformation;
-      url = new URL("api/sessions", connectionInfo.baseUrl.toString());
-      headers = {
-        [COLAB_RUNTIME_PROXY_TOKEN_HEADER.key]: connectionInfo.token,
-      };
-    }
+    const url = new URL(
+      `${TUN_ENDPOINT}/${endpoint}/api/sessions`,
+      this.colabDomain,
+    );
+    const headers = { [COLAB_TUNNEL_HEADER.key]: COLAB_TUNNEL_HEADER.value };
+
     return await this.issueRequest(
       url,
       {
@@ -311,32 +285,6 @@ export class ColabClient {
       },
       z.array(SessionSchema),
     );
-  }
-
-  /**
-   * Deletes the given session
-   *
-   * @param server - The server with the session to delete.
-   * @param sessionId - The ID of the session to delete.
-   * @param signal - Optional {@link AbortSignal} to cancel the request.
-   */
-  async deleteSession(
-    server: ColabAssignedServer,
-    sessionId: string,
-    signal?: AbortSignal,
-  ) {
-    const url = new URL(
-      `api/sessions/${sessionId}`,
-      server.connectionInformation.baseUrl.toString(),
-    );
-    await this.issueRequest(url, {
-      method: "DELETE",
-      headers: {
-        [COLAB_RUNTIME_PROXY_TOKEN_HEADER.key]:
-          server.connectionInformation.token,
-      },
-      signal,
-    });
   }
 
   /**
