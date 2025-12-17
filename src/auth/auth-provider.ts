@@ -141,23 +141,8 @@ export class GoogleAuthProvider implements AuthenticationProvider, Disposable {
     try {
       await this.oAuth2Client.refreshAccessToken();
     } catch (err: unknown) {
-      let shouldClearSession = false;
-      let reason = '';
-
-      if (
-        err instanceof GaxiosError &&
-        err.status === 400 &&
-        err.message.includes('invalid_grant')
-      ) {
-        reason = 'OAuth app access to Colab was revoked';
-        shouldClearSession = true;
-      } else if (err instanceof GaxiosError && err.status === 401) {
-        // This should only ever be the case when developer building from source
-        // switches the OAuth client ID / secret.
-        reason = 'The configured OAuth client has changed';
-        shouldClearSession = true;
-      }
-
+      const { shouldClearSession, reason } =
+        this.shouldClearSessionOnRefreshError(err);
       if (shouldClearSession) {
         log.warn(`${reason}. Clearing session.`, err);
         await this.storage.removeSession(session.id);
@@ -171,6 +156,7 @@ export class GoogleAuthProvider implements AuthenticationProvider, Disposable {
     if (!accessToken) {
       throw new Error('Failed to refresh Google OAuth token.');
     }
+
     this.session = {
       id: session.id,
       accessToken,
@@ -232,7 +218,20 @@ export class GoogleAuthProvider implements AuthenticationProvider, Disposable {
     if (scopes && !matchesRequiredScopes(scopes)) {
       return [];
     }
-    await this.refreshSessionIfNeeded();
+    try {
+      await this.refreshSessionIfNeeded();
+    } catch (err: unknown) {
+      const { shouldClearSession, reason } =
+        this.shouldClearSessionOnRefreshError(err);
+      if (shouldClearSession) {
+        log.warn(`${reason}. Clearing session.`, err);
+        if (this.session?.id) {
+          await this.removeSession(this.session.id);
+        }
+        return [];
+      }
+      log.error('Unable to refresh access token', err);
+    }
     if (options.account && this.session?.account != options.account) {
       return [];
     }
@@ -356,6 +355,26 @@ export class GoogleAuthProvider implements AuthenticationProvider, Disposable {
     );
   }
 
+  private shouldClearSessionOnRefreshError(err: unknown): {
+    shouldClearSession: boolean;
+    reason: string;
+  } {
+    if (isInvalidGrantError(err)) {
+      return {
+        shouldClearSession: true,
+        reason: 'OAuth app access to Colab was revoked.',
+      };
+    }
+    // This should only ever be the case when developer building from source
+    if (isOAuthClientSwitchedError(err)) {
+      return {
+        shouldClearSession: true,
+        reason: 'The configured OAuth client has changed',
+      };
+    }
+    return { shouldClearSession: false, reason: '' };
+  }
+
   private async refreshSessionIfNeeded(): Promise<void> {
     if (!this.session) {
       return;
@@ -369,6 +388,7 @@ export class GoogleAuthProvider implements AuthenticationProvider, Disposable {
     if (!accessToken) {
       throw new Error('Failed to refresh Google OAuth token.');
     }
+
     this.session = {
       ...this.session,
       accessToken,
@@ -409,6 +429,18 @@ function matchesRequiredScopes(scopes: readonly string[]): boolean {
     scopes.length === REQUIRED_SCOPES.length &&
     REQUIRED_SCOPES.every((r) => scopes.includes(r))
   );
+}
+
+function isInvalidGrantError(err: unknown): boolean {
+  return (
+    err instanceof GaxiosError &&
+    err.status === 400 &&
+    err.message.includes('invalid_grant')
+  );
+}
+
+function isOAuthClientSwitchedError(err: unknown): boolean {
+  return err instanceof GaxiosError && err.status === 401;
 }
 
 /**
