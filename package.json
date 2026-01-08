@@ -123,6 +123,46 @@
         "category": "Colab",
         "title": "Colab",
         "icon": "$(colab-logo)"
+      },
+      {
+        "command": "colab.newFile",
+        "title": "New File..."
+      },
+      {
+        "command": "colab.newFolder",
+        "title": "New Folder..."
+      },
+      {
+        "command": "colab.cut",
+        "title": "Cut"
+      },
+      {
+        "command": "colab.copy",
+        "title": "Copy"
+      },
+      {
+        "command": "colab.paste",
+        "title": "Paste"
+      },
+      {
+        "command": "colab.download",
+        "title": "Download..."
+      },
+      {
+        "command": "colab.copyPath",
+        "title": "Copy Path"
+      },
+      {
+        "command": "colab.copyRelativePath",
+        "title": "Copy Relative Path"
+      },
+      {
+        "command": "colab.renameFile",
+        "title": "Rename"
+      },
+      {
+        "command": "colab.deleteFile",
+        "title": "Delete"
       }
     ],
     "icons": {
@@ -182,6 +222,63 @@
           "group": "5b_importexport@30",
           "when": "resourceScheme == file && config.colab.uploading"
         }
+      ],
+      "view/item/context": [
+        {
+          "command": "colab.mountServer",
+          "when": "view == colab-servers-view && config.colab.serverMounting",
+          "group": "control"
+        },
+        {
+          "command": "colab.newFile",
+          "when": "view == colab-servers-view",
+          "group": "navigation"
+        },
+        {
+          "command": "colab.newFolder",
+          "when": "view == colab-servers-view",
+          "group": "navigation"
+        },
+        {
+          "command": "colab.cut",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "1_cutcopypaste"
+        },
+        {
+          "command": "colab.copy",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "1_cutcopypaste"
+        },
+        {
+          "command": "colab.paste",
+          "when": "view == colab-servers-view",
+          "group": "1_cutcopypaste"
+        },
+        {
+          "command": "colab.download",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "5b_importexport"
+        },
+        {
+          "command": "colab.copyPath",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "6_copypath"
+        },
+        {
+          "command": "colab.copyRelativePath",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "6_copypath"
+        },
+        {
+          "command": "colab.renameFile",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "7_modification"
+        },
+        {
+          "command": "colab.deleteFile",
+          "when": "view == colab-servers-view && viewItem != server",
+          "group": "7_modification"
+        }
       ]
     }
   },
@@ -206,9 +303,9 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "pretest": "npm run build && npm run lint",
-    "test:unit": "npm run build:tests && mocha --enable-source-maps --require ./out/test/test/unit-test-setup.js './out/test/**/*.unit.test.js'",
-    "test:integration": "npm run build && node ./out/test/test/integration-test-runner.js",
-    "test:integration:headless": "xvfb-run -s '-screen 0 1024x768x24' npm run test:integration",
+    "test:unit": "npm run build:tests && mocha --require ./out/test/test/unit-test-setup.js './out/test/**/*.unit.test.js'",
+    "test:integration": "npm run build:tests && vscode-test",
+    "test:integration:headless": "npm run build:tests && xvfb-run -s '-screen 0 1024x768x24' vscode-test",
     "pretest:e2e": "npm run build:tests",
     "test:e2e": "scripts/test_e2e.sh",
     "test:e2e:headless": "npm run test:e2e -- --headless",

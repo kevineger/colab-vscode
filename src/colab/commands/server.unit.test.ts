@@ -257,6 +257,7 @@ describe('Server Commands', () => {
           vsCodeStub.asVsCode(),
           assignmentManagerStub,
           fsStub,
+          undefined,
           true,
         );
         await quickPickStub.nextShow();

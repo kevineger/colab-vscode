@@ -26,7 +26,11 @@ import { ConnectionRefreshController } from './colab/connection-refresher';
 import { ConsumptionNotifier } from './colab/consumption/notifier';
 import { ConsumptionPoller } from './colab/consumption/poller';
 import { ServerKeepAliveController } from './colab/keep-alive';
-import { ServerTreeProvider } from './colab/server-browser/server-tree';
+import { ServerItem } from './colab/server-browser/server-item';
+import {
+  registerTreeCommands,
+  ServerTreeProvider,
+} from './colab/server-browser/server-tree';
 import { ServerPicker } from './colab/server-picker';
 import { CONFIG } from './colab-config';
 import { initializeLogger, log } from './common/logging';
@@ -100,6 +104,7 @@ export async function activate(context: vscode.ExtensionContext) {
     assignmentManager.onDidAssignmentsChange,
     fs.onDidChangeFile,
   );
+  registerTreeCommands(context, serverTreeView);
   const connections = new ConnectionRefreshController(assignmentManager);
   const keepServersAlive = new ServerKeepAliveController(
     vscode,
@@ -187,8 +192,14 @@ function registerCommands(
     // in the recent kernels list. See https://github.com/microsoft/vscode-jupyter/issues/17107.
     vscode.commands.registerCommand(
       MOUNT_SERVER.id,
-      async (withBackButton?: boolean) => {
-        await mountServer(vscode, assignmentManager, fs, withBackButton);
+      async (item?: ServerItem, withBackButton?: boolean) => {
+        await mountServer(
+          vscode,
+          assignmentManager,
+          fs,
+          item?.endpoint,
+          withBackButton,
+        );
       },
     ),
     vscode.commands.registerCommand(

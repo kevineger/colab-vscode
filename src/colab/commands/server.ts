@@ -71,6 +71,7 @@ export async function mountServer(
   vs: typeof vscode,
   assignmentManager: AssignmentManager,
   fs: ContentsFileSystemProvider,
+  endpoint?: string,
   withBackButton?: boolean,
 ) {
   const allServers = await assignmentManager.getServers('extension');
@@ -80,6 +81,14 @@ export async function mountServer(
   if (allServers.length === 1) {
     fs.mount(allServers[0]);
     return;
+  }
+
+  if (endpoint) {
+    const server = allServers.find((s) => s.endpoint === endpoint);
+    if (server) {
+      fs.mount(server);
+      return;
+    }
   }
 
   await MultiStepInput.run(vs, async (input) => {
